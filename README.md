@@ -13,3 +13,7 @@ there must be a directory called myname
 
 This was written for me by Rickard Marks. He's also on github
 
+Download the VMDK files here
+
+https://www.dropbox.com/s/4jd50b8hfv4v3hf/MS-DOS%206.22-s001.zip?dl=0
+
