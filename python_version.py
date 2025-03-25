@@ -1,6 +1,9 @@
 import pygame
 import sys
 import os
+from pygame import Surface
+from tkinter import messagebox
+import tkinter as tk
 
 # Initialize arrays
 images = [None] * 100
@@ -30,9 +33,11 @@ def main():
     
     # Check command line arguments
     if len(sys.argv) < 3:
-        pygame.init()
-        pygame.messagebox.showinfo("STDCNV.PY", 
-                                  "use: python stdcnv.py STDFILE SAVEDIR\nProgrammed by Richard Marks - 9:04 PM 11-15-04\nPython conversion by Claude")
+        root = tk.Tk()
+        root.withdraw()  # Hide the main window
+        messagebox.showinfo("STDCNV.PY", 
+                           "use: python stdcnv.py STDFILE SAVEDIR\nProgrammed by Richard Marks - 9:04 PM 11-15-04\nPython conversion by Claude")
+        root.destroy()
         return -1
     
     std_file = sys.argv[1]
@@ -79,11 +84,17 @@ def main():
             pygame.image.save(images[i], bmp_path)
             count += 1
         except Exception as e:
-            pygame.messagebox.showerror("Save Error", 
-                                       f"Error saving bitmap #{i} to {bmp_path}: {e}")
+            root = tk.Tk()
+            root.withdraw()
+            messagebox.showerror("Save Error", 
+                                f"Error saving bitmap #{i} to {bmp_path}: {e}")
+            root.destroy()
     
     # Show success message
-    pygame.messagebox.showinfo("Success", f"Saved {count} bitmaps in {save_dir}")
+    root = tk.Tk()
+    root.withdraw()
+    messagebox.showinfo("Success", f"Saved {count} bitmaps in {save_dir}")
+    root.destroy()
     
     # Main loop - wait for ESC key
     running = True
