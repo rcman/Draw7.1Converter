@@ -1,8 +1,9 @@
 import os
 import tkinter as tk
 from tkinter import filedialog, messagebox, ttk
-from PIL import Image, ImageTk
-import struct
+from PIL import Image
+import tempfile
+import io
 
 class STDViewer(tk.Tk):
     def __init__(self):
@@ -14,6 +15,8 @@ class STDViewer(tk.Tk):
         self.images = []
         self.photo_images = []
         self.current_files = []
+        self.sheet_photo_refs = []
+        self.temp_files = []  # To track temporary files
         
         # Create UI elements
         self.create_widgets()
@@ -95,10 +98,15 @@ class STDViewer(tk.Tk):
         
         # Configure canvas scrolling
         self.image_frame.bind("<Configure>", self.on_frame_configure)
+        self.sheet_canvas.bind("<Configure>", self.on_sheet_canvas_configure)
         
     def on_frame_configure(self, event):
         # Update the scroll region to encompass the inner frame
         self.canvas.configure(scrollregion=self.canvas.bbox("all"))
+        
+    def on_sheet_canvas_configure(self, event):
+        # Update the scroll region for sheet canvas
+        self.sheet_canvas.configure(scrollregion=self.sheet_canvas.bbox("all"))
         
     def select_directory(self):
         directory = filedialog.askdirectory()
@@ -106,14 +114,43 @@ class STDViewer(tk.Tk):
             self.lbl_dir.config(text=directory)
             self.scan_directory(directory)
     
+    def cleanup_temp_files(self):
+        """Clean up any temporary files we created"""
+        for temp_file in self.temp_files:
+            try:
+                if os.path.exists(temp_file):
+                    os.remove(temp_file)
+            except Exception as e:
+                print(f"Error removing temp file {temp_file}: {e}")
+        self.temp_files = []
+    
+    def pil_to_tkimage(self, pil_image):
+        """Convert PIL Image to Tkinter PhotoImage without ImageTk"""
+        # Create a temporary file for the image
+        with tempfile.NamedTemporaryFile(suffix='.gif', delete=False) as temp_file:
+            temp_filename = temp_file.name
+            self.temp_files.append(temp_filename)
+            
+        # Save the PIL image as GIF (with transparency)
+        pil_image.save(temp_filename, 'GIF')
+        
+        # Open with Tkinter's PhotoImage
+        photo = tk.PhotoImage(file=temp_filename)
+        return photo
+    
     def scan_directory(self, directory):
         # Clear previous images
         for widget in self.image_frame.winfo_children():
             widget.destroy()
         
+        # Clean up previous temp files
+        self.cleanup_temp_files()
+        
+        # Clear previous references to ensure proper garbage collection
         self.images = []
         self.photo_images = []
         self.current_files = []
+        self.sheet_photo_refs = []
         
         # Find all .STD files
         std_files = []
@@ -145,8 +182,8 @@ class STDViewer(tk.Tk):
                     # Scale up the image for better visibility
                     img_scaled = img.resize((64, 64), Image.NEAREST)
                     
-                    # Convert to PhotoImage
-                    photo = ImageTk.PhotoImage(img_scaled)
+                    # Convert to tkinter PhotoImage
+                    photo = self.pil_to_tkimage(img_scaled)
                     self.photo_images.append(photo)  # Keep a reference
                     
                     # Create a frame for the image and its label
@@ -169,6 +206,9 @@ class STDViewer(tk.Tk):
                         row += 1
             except Exception as e:
                 print(f"Error processing {std_file}: {e}")
+        
+        # Update the grid layout after processing all files
+        self.image_frame.update_idletasks()
         
         # Update the file dropdown
         self.file_dropdown['values'] = [os.path.basename(f) for f in self.current_files]
@@ -203,10 +243,10 @@ class STDViewer(tk.Tk):
             
             # Create a frame for the sprites
             sheet_frame = tk.Frame(self.sheet_canvas)
-            sheet_frame_id = self.sheet_canvas.create_window(0, 0, window=sheet_frame, anchor=tk.NW)
+            self.sheet_canvas.create_window(0, 0, window=sheet_frame, anchor=tk.NW)
             
             # Display each sprite
-            photo_refs = []  # Keep references to prevent garbage collection
+            self.sheet_photo_refs = []  # Store references to prevent garbage collection
             for i, sprite in enumerate(sprites):
                 if sprite:
                     row = i // sprites_per_row
@@ -214,8 +254,8 @@ class STDViewer(tk.Tk):
                     
                     # Scale up the sprite
                     sprite_scaled = sprite.resize((sprite_size, sprite_size), Image.NEAREST)
-                    photo = ImageTk.PhotoImage(sprite_scaled)
-                    photo_refs.append(photo)
+                    photo = self.pil_to_tkimage(sprite_scaled)
+                    self.sheet_photo_refs.append(photo)
                     
                     # Create a frame for each sprite
                     sprite_frame = tk.Frame(sheet_frame)
@@ -310,3 +350,32 @@ class STDViewer(tk.Tk):
             (255, 85, 255),  # 13: Light Magenta
             (255, 255, 85),  # 14: Yellow
             (255, 255, 255)  # 15: White
+        ]
+        
+        # Process each pixel
+        for y in range(16):
+            for x in range(16):
+                index = y * 16 + x
+                if index < len(pixel_data):
+                    # Get color index (limit to 0-15 to avoid index errors)
+                    color_index = pixel_data[index] & 0x0F
+                    if color_index < 0 or color_index >= len(color_palette):
+                        color_index = 0
+                    
+                    # Assign RGB color to pixel
+                    pixels.append(color_palette[color_index])
+                else:
+                    # Default to black if data is missing
+                    pixels.append((0, 0, 0))
+        
+        # Populate the image with pixels
+        img.putdata(pixels)
+        return img
+    
+    def __del__(self):
+        """Destructor to ensure temp files are cleaned up"""
+        self.cleanup_temp_files()
+
+if __name__ == "__main__":
+    app = STDViewer()
+    app.mainloop()
