@@ -32,16 +32,19 @@ def main():
     global count, images
     
     # Check command line arguments
-    if len(sys.argv) < 3:
+    if len(sys.argv) < 2:
         root = tk.Tk()
         root.withdraw()  # Hide the main window
         messagebox.showinfo("STDCNV.PY", 
-                           "use: python stdcnv.py STDFILE SAVEDIR\nProgrammed by by Claude")
+                           "use: python stdcnv.py STDFILE\nProgrammed by Richard Marks - 9:04 PM 11-15-04\nPython conversion by Claude")
         root.destroy()
         return -1
     
     std_file = sys.argv[1]
-    save_dir = sys.argv[2]
+    # Use the same directory as the source file
+    save_dir = os.path.dirname(os.path.abspath(std_file))
+    if not save_dir:  # If the path is empty (e.g., just a filename)
+        save_dir = os.getcwd()  # Use current working directory
     
     # Initialize pygame
     pygame.init()
@@ -77,24 +80,32 @@ def main():
     if not os.path.exists(save_dir):
         os.makedirs(save_dir)
     
-    # Save all bitmaps
-    for i in range(100):
-        bmp_path = os.path.join(save_dir, f"{os.path.basename(save_dir)}_{i}.bmp")
-        try:
-            pygame.image.save(images[i], bmp_path)
-            count += 1
-        except Exception as e:
-            root = tk.Tk()
-            root.withdraw()
-            messagebox.showerror("Save Error", 
-                                f"Error saving bitmap #{i} to {bmp_path}: {e}")
-            root.destroy()
+    # Create a single spritesheet
+    # Calculate dimensions for a 10x10 grid of 16x16 sprites
+    spritesheet = pygame.Surface((160, 160), pygame.SRCALPHA)
     
-    # Show success message
-    root = tk.Tk()
-    root.withdraw()
-    messagebox.showinfo("Success", f"Saved {count} bitmaps in {save_dir}")
-    root.destroy()
+    # Place sprites on the spritesheet
+    for y in range(10):
+        for x in range(10):
+            index = x + y * 10
+            spritesheet.blit(images[index], (x * 16, y * 16))
+    
+    # Save the spritesheet
+    base_name = os.path.splitext(os.path.basename(std_file))[0]
+    spritesheet_path = os.path.join(save_dir, f"{base_name}_spritesheet.bmp")
+    
+    try:
+        pygame.image.save(spritesheet, spritesheet_path)
+        count = 1  # Successfully saved one file (the spritesheet)
+        root = tk.Tk()
+        root.withdraw()
+        messagebox.showinfo("Success", f"Saved spritesheet to {spritesheet_path}")
+        root.destroy()
+    except Exception as e:
+        root = tk.Tk()
+        root.withdraw()
+        messagebox.showerror("Save Error", f"Error saving spritesheet to {spritesheet_path}: {e}")
+        root.destroy()
     
     # Main loop - wait for ESC key
     running = True
