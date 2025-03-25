@@ -18,7 +18,7 @@ int main(int args, char* argv[])
     if (args < 3)
     {
         SDL_ShowSimpleMessageBox(SDL_MESSAGEBOX_INFORMATION, "STDCNV.EXE", 
-            "use: STDCNV.EXE STDFILE SAVEDIR\nProgrammed by Richard Marks - 9:04 PM 11-15-04", NULL);
+            "use: STDCNV.EXE STDFILE SAVEDIR\nProgrammed by Franco Gaetan", NULL);
         return -1;
     }
 
