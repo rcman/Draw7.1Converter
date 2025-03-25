@@ -1,6 +1,6 @@
 import os
 import tkinter as tk
-from tkinter import filedialog, messagebox
+from tkinter import filedialog, messagebox, ttk
 from PIL import Image, ImageTk
 import struct
 
@@ -8,11 +8,12 @@ class STDViewer(tk.Tk):
     def __init__(self):
         super().__init__()
         self.title("STD File Viewer")
-        self.geometry("800x600")
+        self.geometry("900x700")
         
-        # Store loaded images
+        # Store loaded images and file info
         self.images = []
         self.photo_images = []
+        self.current_files = []
         
         # Create UI elements
         self.create_widgets()
@@ -30,8 +31,16 @@ class STDViewer(tk.Tk):
         self.lbl_dir = tk.Label(control_frame, text="No directory selected")
         self.lbl_dir.pack(side=tk.LEFT, padx=10, fill=tk.X, expand=True)
         
+        # Create a notebook for tabs
+        self.notebook = ttk.Notebook(self)
+        self.notebook.pack(fill=tk.BOTH, expand=True, padx=10, pady=5)
+        
+        # Create first tab for image grid view
+        self.grid_frame = tk.Frame(self.notebook)
+        self.notebook.add(self.grid_frame, text="Grid View")
+        
         # Create a canvas with scrollbar for displaying images
-        self.canvas_frame = tk.Frame(self)
+        self.canvas_frame = tk.Frame(self.grid_frame)
         self.canvas_frame.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
         
         self.canvas = tk.Canvas(self.canvas_frame, bg="white")
@@ -47,6 +56,36 @@ class STDViewer(tk.Tk):
         # Create a frame inside the canvas for image display
         self.image_frame = tk.Frame(self.canvas)
         self.canvas.create_window((0, 0), window=self.image_frame, anchor=tk.NW)
+        
+        # Create second tab for sprite sheet view of a single file
+        self.sheet_frame = tk.Frame(self.notebook)
+        self.notebook.add(self.sheet_frame, text="Sprite Sheet View")
+        
+        # File selection for sprite sheet view
+        self.file_select_frame = tk.Frame(self.sheet_frame)
+        self.file_select_frame.pack(fill=tk.X, padx=10, pady=5)
+        
+        self.lbl_file = tk.Label(self.file_select_frame, text="Select file:")
+        self.lbl_file.pack(side=tk.LEFT, padx=5)
+        
+        self.file_var = tk.StringVar()
+        self.file_dropdown = ttk.Combobox(self.file_select_frame, textvariable=self.file_var, state="readonly")
+        self.file_dropdown.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=5)
+        self.file_dropdown.bind("<<ComboboxSelected>>", self.on_file_selected)
+        
+        # Canvas for sprite sheet display
+        self.sheet_canvas_frame = tk.Frame(self.sheet_frame)
+        self.sheet_canvas_frame.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
+        
+        self.sheet_canvas = tk.Canvas(self.sheet_canvas_frame, bg="white")
+        self.sheet_scrollbar_y = tk.Scrollbar(self.sheet_canvas_frame, orient=tk.VERTICAL, command=self.sheet_canvas.yview)
+        self.sheet_scrollbar_x = tk.Scrollbar(self.sheet_canvas_frame, orient=tk.HORIZONTAL, command=self.sheet_canvas.xview)
+        
+        self.sheet_canvas.configure(yscrollcommand=self.sheet_scrollbar_y.set, xscrollcommand=self.sheet_scrollbar_x.set)
+        
+        self.sheet_scrollbar_y.pack(side=tk.RIGHT, fill=tk.Y)
+        self.sheet_scrollbar_x.pack(side=tk.BOTTOM, fill=tk.X)
+        self.sheet_canvas.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
         
         # Status bar
         self.status_var = tk.StringVar()
@@ -74,6 +113,7 @@ class STDViewer(tk.Tk):
         
         self.images = []
         self.photo_images = []
+        self.current_files = []
         
         # Find all .STD files
         std_files = []
@@ -84,6 +124,7 @@ class STDViewer(tk.Tk):
         if not std_files:
             messagebox.showinfo("No Files", "No .STD files found in the selected directory")
             self.status_var.set("No .STD files found")
+            self.file_dropdown['values'] = []
             return
         
         self.status_var.set(f"Found {len(std_files)} .STD files. Processing...")
@@ -96,10 +137,11 @@ class STDViewer(tk.Tk):
         for std_file in std_files:
             try:
                 # Extract first image from STD file
-                # Based on the original C code, we know each file can contain multiple 16x16 images
-                # But we only want to show the first image from each file
                 img = self.extract_first_image(std_file)
                 if img:
+                    # Store the file path
+                    self.current_files.append(std_file)
+                    
                     # Scale up the image for better visibility
                     img_scaled = img.resize((64, 64), Image.NEAREST)
                     
@@ -128,7 +170,73 @@ class STDViewer(tk.Tk):
             except Exception as e:
                 print(f"Error processing {std_file}: {e}")
         
+        # Update the file dropdown
+        self.file_dropdown['values'] = [os.path.basename(f) for f in self.current_files]
+        if self.current_files:
+            self.file_dropdown.current(0)
+            self.on_file_selected(None)
+            
         self.status_var.set(f"Loaded {len(self.photo_images)} images from {len(std_files)} .STD files")
+    
+    def on_file_selected(self, event):
+        selected_file = self.file_var.get()
+        if selected_file:
+            file_path = next((f for f in self.current_files if os.path.basename(f) == selected_file), None)
+            if file_path:
+                self.show_sprite_sheet(file_path)
+    
+    def show_sprite_sheet(self, file_path):
+        # Clear previous content
+        self.sheet_canvas.delete("all")
+        
+        try:
+            # Load all sprites from the file
+            sprites = self.extract_all_images(file_path)
+            if not sprites:
+                self.status_var.set(f"No valid sprites found in {os.path.basename(file_path)}")
+                return
+                
+            # Arrange sprites in a grid (10 per row)
+            sprites_per_row = 10
+            padding = 5
+            sprite_size = 64  # Display size
+            
+            # Create a frame for the sprites
+            sheet_frame = tk.Frame(self.sheet_canvas)
+            sheet_frame_id = self.sheet_canvas.create_window(0, 0, window=sheet_frame, anchor=tk.NW)
+            
+            # Display each sprite
+            photo_refs = []  # Keep references to prevent garbage collection
+            for i, sprite in enumerate(sprites):
+                if sprite:
+                    row = i // sprites_per_row
+                    col = i % sprites_per_row
+                    
+                    # Scale up the sprite
+                    sprite_scaled = sprite.resize((sprite_size, sprite_size), Image.NEAREST)
+                    photo = ImageTk.PhotoImage(sprite_scaled)
+                    photo_refs.append(photo)
+                    
+                    # Create a frame for each sprite
+                    sprite_frame = tk.Frame(sheet_frame)
+                    sprite_frame.grid(row=row, column=col, padx=padding, pady=padding)
+                    
+                    # Display sprite
+                    sprite_label = tk.Label(sprite_frame, image=photo)
+                    sprite_label.pack()
+                    
+                    # Display sprite number
+                    num_label = tk.Label(sprite_frame, text=f"#{i}")
+                    num_label.pack()
+            
+            # Update canvas scrolling
+            sheet_frame.update_idletasks()
+            self.sheet_canvas.configure(scrollregion=self.sheet_canvas.bbox("all"))
+            
+            self.status_var.set(f"Loaded {len(sprites)} sprites from {os.path.basename(file_path)}")
+            
+        except Exception as e:
+            self.status_var.set(f"Error displaying sprite sheet: {e}")
     
     def extract_first_image(self, std_file):
         """
@@ -146,55 +254,59 @@ class STDViewer(tk.Tk):
                 if len(pixel_data) < image_size:
                     return None  # Not enough data
                 
-                # Create a new RGB image
-                img = Image.new('RGB', (16, 16))
-                pixels = []
-                
-                # Convert each byte to an RGB value using a color palette
-                # This uses a standard 16-color palette that would have been common in older graphics
-                color_palette = [
-                    (0, 0, 0),       # 0: Black
-                    (0, 0, 170),     # 1: Blue
-                    (0, 170, 0),     # 2: Green
-                    (0, 170, 170),   # 3: Cyan
-                    (170, 0, 0),     # 4: Red
-                    (170, 0, 170),   # 5: Magenta
-                    (170, 85, 0),    # 6: Brown
-                    (170, 170, 170), # 7: Light Gray
-                    (85, 85, 85),    # 8: Dark Gray
-                    (85, 85, 255),   # 9: Light Blue
-                    (85, 255, 85),   # 10: Light Green
-                    (85, 255, 255),  # 11: Light Cyan
-                    (255, 85, 85),   # 12: Light Red
-                    (255, 85, 255),  # 13: Light Magenta
-                    (255, 255, 85),  # 14: Yellow
-                    (255, 255, 255)  # 15: White
-                ]
-                
-                # Build the image pixel by pixel
-                x, y = 0, 0
-                for byte in pixel_data:
-                    # Convert the byte to an integer if needed
-                    value = byte if isinstance(byte, int) else ord(byte)
-                    
-                    # Use the value to index into the color palette
-                    # Make sure the value is within the range of our palette
-                    color_index = value % len(color_palette)
-                    pixels.append(color_palette[color_index])
-                    
-                    # Move to the next position
-                    x += 1
-                    if x >= 16:
-                        x = 0
-                        y += 1
-                
-                img.putdata(pixels)
-                return img
+                return self.create_image_from_pixel_data(pixel_data)
                 
         except Exception as e:
             print(f"Error reading {std_file}: {e}")
             return None
-
-if __name__ == "__main__":
-    app = STDViewer()
-    app.mainloop()
+    
+    def extract_all_images(self, std_file):
+        """
+        Extract all 16x16 pixel images from an STD file.
+        """
+        sprites = []
+        try:
+            with open(std_file, 'rb') as f:
+                file_data = f.read()
+                
+                # Extract sprites (each is 256 bytes)
+                sprite_size = 256
+                for i in range(0, len(file_data), sprite_size):
+                    if i + sprite_size <= len(file_data):
+                        pixel_data = file_data[i:i+sprite_size]
+                        sprite = self.create_image_from_pixel_data(pixel_data)
+                        sprites.append(sprite)
+            
+            return sprites
+                
+        except Exception as e:
+            print(f"Error extracting sprites from {std_file}: {e}")
+            return []
+    
+    def create_image_from_pixel_data(self, pixel_data):
+        """
+        Create a PIL Image from raw pixel data using the appropriate color palette.
+        """
+        # Create a new RGB image
+        img = Image.new('RGB', (16, 16))
+        pixels = []
+        
+        # Convert each byte to an RGB value using a VGA-style color palette
+        # This palette is based on the standard 16-color VGA palette
+        color_palette = [
+            (0, 0, 0),       # 0: Black
+            (0, 0, 170),     # 1: Blue
+            (0, 170, 0),     # 2: Green
+            (0, 170, 170),   # 3: Cyan
+            (170, 0, 0),     # 4: Red
+            (170, 0, 170),   # 5: Magenta
+            (170, 85, 0),    # 6: Brown
+            (170, 170, 170), # 7: Light Gray
+            (85, 85, 85),    # 8: Dark Gray
+            (85, 85, 255),   # 9: Light Blue
+            (85, 255, 85),   # 10: Light Green
+            (85, 255, 255),  # 11: Light Cyan
+            (255, 85, 85),   # 12: Light Red
+            (255, 85, 255),  # 13: Light Magenta
+            (255, 255, 85),  # 14: Yellow
+            (255, 255, 255)  # 15: White
