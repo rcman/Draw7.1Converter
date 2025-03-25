@@ -36,7 +36,7 @@ def main():
         root = tk.Tk()
         root.withdraw()  # Hide the main window
         messagebox.showinfo("STDCNV.PY", 
-                           "use: python stdcnv.py STDFILE SAVEDIR\nProgrammed by Richard Marks - 9:04 PM 11-15-04\nPython conversion by Claude")
+                           "use: python stdcnv.py STDFILE SAVEDIR\nProgrammed by by Claude")
         root.destroy()
         return -1
     
